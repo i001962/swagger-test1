@@ -1,0 +1,863 @@
+---
+openapi: "3.0.1"
+info:
+  title: "SealAPI" # ... and Enterprise Blockchain Enablement API
+  description: |
+    Cryptowerk Horizon API (SealAPI) is a solution to verify the authenticity of data at massive scale using blockchains.
+    With the help of Cryptowerk Horizon API you can prove the existence of a document or any other kind of data at
+    a certain time without needing a trusted third party. This API supports high data volumes and reduces the cost
+    of using a public blockchain. You never submit original data to Cryptowerk Horizon API, only hashes of data.
+    This provides the highest possible security, efficiency, and ease of implementation.
+
+    ## Overview
+
+    Cryptowerk Horizon API writes hashes of data into the Bitcoin and Ethereum blockchain by default. Hashes will be
+    submitted in the register call and the result contains a unique retrieval-ID. Cryptowerk bundles the collected
+    hashes and creates a single super-hash. This super-hash is then written into the Bitcoin blockchain and Ethereum
+    blockchain. After the super-hash has been stored in one or more blockchains, the retrieval-ID will be exchanged
+    with a Seal. A Seal contains all information necessary to prove that the hashes registered are now part of the
+    chosen blockchains.
+
+    The flows supported by this API are:
+
+    Hash(es)  -->  retrieval-ID  -->  Seal
+
+    The retrieval-ID for each hash can be found in the response JSON of a sucessful 'register' call.
+
+    There are two approaches to retrieve the actual Seal:
+
+    ### Polling
+
+    Call `/verify` in an interval and provide the retrievalID(s) and check for the return value.
+    If you don't have the retrievalID, you can also use the hash originally registered.
+    Note though that there could be duplicates returned. (Hashes are not unique)
+
+    ### Webhook and Callback
+
+    Specify a `callback` URL when registering hashes using `/register`.
+    Once the Seal becomes available the Cryptowerk Horizon API will make a `POST` request to the URL given.
+    The `User-Agent` header of the request identifies the Cryptowerk Server and is set to `Cryptowerk Callback v1`.
+
+    If the endpoint is unavailable, Cryptowerk will retry every 5 minutes for 12 hours total. After that period, if your HTTP endpoint did not get operational within that timeframe, you can still retrieve your seal(s) using the verify API call.
+
+    In addition to using http or https, you can also publish a message to MQTT.
+
+    ## Seals
+
+    A Seal contains the information required to prove that a document had been registered in a blockchain. I.e., among
+    other things, it contains a (transaction) identifier in one or multiple blockchains, the hash of a document,
+    the conclusive mathematical proof linking the document to the blockchain demonstrating the document's existence at
+    registration time and it not having been tampered with, the time this document was submitted to the server and
+    the time it was submitted to the blockchain.
+
+
+    ## API Credentials
+
+    Authentication is based on providing your API key and signing with the API secret.
+    You can request an API key and secret in the Developer portal.
+
+    In the examples below, the API key and secret is transmitted as custom header X-API-Key.
+    To create a valid value concatenate the API Key and secret separated by a space.
+
+    ```shell
+    X-API-Key: V....o= A...DRM="
+    ```
+
+    ```java
+    HttpURLConnection con = ...
+    con.addRequestProperty("X-API-Header", apiKey + " "+ apiSecret);
+    ```
+
+    You can also transmit the information in query parameters as an alternative (see API docs below)
+    
+  version: "2019-01-04-1"
+  contact:
+    name: Cryptowerk
+    email: support@cryptowerk.com
+    url: 'https://www.cryptowerk.com'
+  license:
+    name: Proprietary license.
+x-sap-shortText: Interface for the Enterprise Blockchain Enablement Service from Cryptowerk.
+servers:
+- url: ${platformUrl}/API/v8
+- url: ${platformUrl}/API/v7
+- url: ${platformUrl}/API/v6
+
+externalDocs:
+  description: User Guide and Examples
+  url: "../../../apiResources/asset/userguide/SealAPI.html" # this relative URL needs to work both in Swagger UI and in userguide 
+#  description: Additional Documentation as PDF
+#  url: 'https://www.sealwitness.com/platform/assets/API.generic.pdf'
+
+#security:
+#  - APIKeyHeader: []
+#  - CognitoUserPoolAuthorizer: []
+
+
+tags:
+  - name: "Sealing"
+    description: Operations related to sealing generic data items. 
+
+components:
+  securitySchemes:
+    APIKeyHeader:
+      description: |
+        Concatenation of the API key and secret separated by a space.
+      type: "apiKey"
+      in: "header"
+      name: "X-API-Key"
+  schemas:
+    Empty:
+      type: "object"
+      title: "Empty Schema"
+    Seal:
+      type: object
+      properties:
+        bundleMethod:
+          type: string
+          default: BALANCED_MERKLE_TREE
+          example: BALANCED_MERKLE_TREE
+        operations:
+          type: array
+          items:
+            oneOf:
+            - type: object
+              properties:
+                opcode:
+                  type: string
+                  enum: ["DOC_SHA256"]
+                docHash:
+                  type: string
+                  minLength: 64
+                  maxLength: 64
+                  example: 181210f8f9c779c26da1d9b2075bde0127302ee0e3fca38c9a83f5b1dd8e5d3b
+            - type: object
+              properties:
+                opcode:
+                  type: string
+                  enum: ["APPEND_THEN_SHA256"]
+                hash:
+                  type: string
+                  minLength: 64
+                  maxLength: 64
+                  example: 181210f8f9c779c26da1d9b2075bde0127302ee0e3fca38c9a83f5b1dd8e5d3b
+            - type: object
+              properties:
+                opcode:
+                  type: string
+                  enum: ["PREPEND_THEN_SHA256"]
+                hash:
+                  type: string
+                  minLength: 64
+                  maxLength: 64
+                  example: 181210f8f9c779c26da1d9b2075bde0127302ee0e3fca38c9a83f5b1dd8e5d3b
+            - type: object
+              properties:
+                opcode:
+                  type: string
+                  enum: ["ANCHOR_SHA256"]
+                hash:
+                  type: string
+                  minLength: 64
+                  maxLength: 64
+                  example: 181210f8f9c779c26da1d9b2075bde0127302ee0e3fca38c9a83f5b1dd8e5d3b
+            - type: object
+              properties:
+                opcode:
+                  type: string
+                  enum: ["BLOCKCHAIN"]
+                blockchainGeneralName:
+                  type: string
+                instanceName:
+                  type: string
+                blockChainId:
+                  type: string                
+                insertedIntoBlockchainAt:
+                  type: integer
+                  format: int64
+            - type: object
+              properties:
+                opcode:
+                  type: string
+                  enum: ["DOCUMENTINFO"]
+                lookupInfo:
+                  type: string
+                name:
+                  type: string
+                contentType:
+                  type: string                
+                submittedAt:
+                  type: integer
+                  format: int64
+            - type: object
+              properties:
+                opcode:
+                  type: string
+                  enum: ["SEALEDMETADATA"]
+                data:
+                  type: string
+                metaDataStamps:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Seal'
+    Registration:
+      type: object
+      properties:
+        minSupportedAPIVersion:
+          type: integer
+          description: |
+            API version must be greater or equal to this value on this server
+        maxSupportedAPIVersion:
+          type: integer
+          description: |
+            API version must be less or equal to this value on this server
+        documents:
+          type: array
+          items:
+            type: object
+            properties:
+              retrievalId:
+                type: string
+                description: |
+                  This ID can be used to verify the existence of a document (see /verify)
+    Verification:
+      type: object
+      properties:
+        minSupportedAPIVersion:
+          type: integer
+          description: |
+            API version must be greater or equal to this value on this server
+        maxSupportedAPIVersion:
+          type: integer
+          description: |
+            API version must be less or equal to this value on this server
+        documents:
+          description: Array of documents that were found by the given parameters
+          type: array
+          items:
+            type: object
+            properties:
+              retrievalId:
+                description: Unique identifier for the document.
+                type: string
+              seals:
+                type: array
+                description: |
+                  A Seal contains the information required to prove that a document had been registered in a blockchain.
+                  I.e., among other things, it contains a (transaction) identifier in one or multiple blockchains, the hash of a document,
+                  the conclusive mathematical proof linking the document to the blockchain demonstrating the document's existence at
+                  registration time and it not having been tampered with, the time this document was
+                  submitted to the server and the time it was submitted to
+                  the blockchain.
+                items:
+                  $ref: '#/components/schemas/Seal'
+                  #type: object
+                  #properties:
+                  #  data:
+                  #    type: string
+                  #    description: >-
+                  #      unique identifier for one document in one
+                  #      blockchain
+              #verificationInstructions:
+              #  type: object
+              #  properties:
+              #    bundles:
+              #      type: array
+              #      items:
+              #        type: object
+              #        properties:
+              #          sequence:
+              #            description: >-
+              #              Each of the objects in this array called
+              #              sequence contains either the hash to append,
+              #              the hash to prepend, or the anchor hash. If the
+              #              concatenated hashes in each step are hashed
+              #              again in the right order, the final result will
+              #              be the anchor hash that can be found in the
+              #              blockchain(s) where this document bundle is
+              #              registered.
+              #            type: array
+              #            items:
+              #              type: object
+              #              properties:
+              #                append:
+              #                  type: string
+              #                  description: hash to append to previous result to
+              #                prepend:
+              #                  type: string
+              #                  description: >-
+              #                    hash to be appended to the previous
+              #                    result
+              #                anchor:
+              #                  type: string
+              #                  description: >-
+              #                    hash to be found directly in the
+              #                    blockchain (anchor of the bundle)
+              #          blockchainRegistrations:
+              #            type: array
+              #            items:
+              #              type: object
+              #              properties:
+              #                blockChainId:
+              #                  type: string
+              #                  description: id for the used blockchain.
+              #                insertedIntoBlockchainAt:
+              #                  type: integer
+              #                  format: int64
+              #                  description: >-
+              #                    timestamp for the blockchain
+              #                    registration of the bundle
+              #                blockChainDesc:
+              #                  type: object
+              #                  properties:
+              #                    instanceName:
+              #                      type: string
+              #                      description: Name of the blockchain instance
+              #                    generalName:
+              #                      type: string
+              #                      description: General name of the blockchain instance
+              name:
+                type: string
+                description: |
+                  This is the same name that was used for the registration of this document.
+              submittedAt:
+                type: integer
+                format: int64
+                description: |
+                  Time stamp when this document/hash was received by the server (milliseconds since 1/1/1970 12:00am UST)
+              contentType:
+                type: string
+                description: |
+                  This is the same content type as on registration of the document.
+              hasBeenInsertedIntoAtLeastOneBlockchain:
+                type: boolean
+                description: |
+                  This property is true, if the document has been registered with at least one blockchain, otherwise it is false.
+              hasBeenInsertedIntoAllRequestedBlockchains:
+                type: boolean
+                description: |
+                  This property is true, if the document has been registered with all requested blockchains, otherwise it is false.
+              blockchainRegistrations:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    blockChainId:
+                      type: string
+                      description: id for the used blockchain.
+                    insertedIntoBlockchainAt:
+                      type: integer
+                      format: int64
+                      description: |
+                        Time stamp for the blockchain registration of the document bundle that contains this document in the
+                        blockchain (milliseconds since 1/1/1970 12:00am UST).
+                    numConfirmations:
+                      type: integer
+                      description: |
+                        Number of verifications that witness the document bundle in the blockchain.
+                    blockChainDesc:
+                      type: object
+                      properties:
+                        instanceName:
+                          type: string
+                          description: Name of the blockchain instance
+                        generalName:
+                          type: string
+                          description: General name of the blockchain instance
+  parameters:
+    apiVersion:
+      in: query
+      name: version
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        #default: The version specified in the URL.
+      description: API version to use by this call. Usually, you leave this empty and are specifying the version in the URL as .../vN/... . If for some reason you don't - or you want to override the version given in the URL - use this parameter.
+
+paths:
+  /register:
+    parameters:
+    - $ref: '#/components/parameters/apiVersion'
+    - in: query
+      name: name
+      required: false
+      schema:
+        type: string
+      description: Name of the document
+    # store parameter will be discontinued
+    #- in: query
+    #  name: store
+    #  required: false
+    #  schema:
+    #    type: boolean
+    #  description: >-
+    #    Permission to store the metadata of the document in our
+    #    database. Only the hash will be stored on our side if this
+    #    value is set to false.
+    - in: query
+      name: hashes
+      required: true
+      schema:
+        type: string
+        default: "1111111111111111111111111111111111111111111111111111111111111111,2222222222222222222222222222222222222222222222222222222222222222"
+      description: |
+        Comma separated hexadecimal representation of the hashes for
+        the data to be registered for proof of existence.
+    - in: query
+      name: contentType
+      required: false
+      schema:
+        type: string
+      description: This value describes the content type (mime type) of the data.
+    - in: query
+      name: lookupInfo
+      required: false
+      schema:
+        type: string
+      description: |
+        Here, you can provide your own information that later helps you in looking up your data where you want to put your seal. This can be any text string.
+        For instance, you might have a row in your database that holds the data you want to seal. This row might have a primary key that identifies it. You can set this parameter to this primary key of yours.
+        Later when a callback (see below) arrives or when you use the verify API call (see below), this lookupInfo is provided to you. Actually it's both in the seal itself and in the API response document.
+        Since you know that this actually is a primary key, you can easily retrieve the database row and store the seal in a column of that row.
+        This lookupInfo applies to all hashes provided.
+    - in: query
+      name: lookupInfos
+      required: false
+      schema:
+        type: string
+      description: |
+        This parameter provides the same functionality as parameter 'lookupInfo'. However, you provide a potentially different lookupInfo for each hash as a list separated by comma.
+    - in: query
+      name: callback
+      required: false
+      schema:
+        type: string
+      description: |
+        Callback specification for the registration events in the requested blockchains.
+        You can have a callback initiated either to a URL or to an email address or via an MQTT message.
+        URL: Use 'http' as the protocol specifier, then either 'jsonplain' for a plain JSON object or
+        'jsonformenc' for a URL-formencoded JSON object. Then add the http or https URL to call.
+        You can then add a format for the seal/stamp by adding a semicolon, 'stampFormat:' and either 'JSON'
+        for JSON or 'STREAM' for a compressed binary format.
+        Examples:
+        http:jsonplain:https://some.site.com/5d5803df-0e8b-4779-80e8 or
+        http:jsonformenc:http://another.com/14nv2 or
+        http:jsonformenc:http://yetanotherwebhook.com/14nve;stampFormat:JSON
+
+        By default, query parameters that you include in the URL are stripped from it and instead included in the POST body. For 'jsonplain', a JSON attribute 'query' is added that includes the key/value pairs from the query.
+        This is because it is generally discouraged to use query parameters, usually for a GET request, in a POST request.
+        If, however, you insist to issue a POST request including query parameters, add 'keepQuery:true'. For instance:
+        http:jsonplain:https://some.site.com/5d5803df-0e8b-4779-80e8?myparameter=somevalue;keepQuery:true
+
+        Email: Use 'email' as the protocol specifier, then, like for 'http' use 'jsonplain' or 'jsonformenc',
+        then the email address, and then optionally a stamp format. Example:
+        email:jsonplain:callbacktest@somemaildomain.com
+
+        MQTT: Use 'mqtt' as the protocol specifier, then the endpoint for the message broker, a semicolon,
+        the topic used for publishing, a semicolon, a JSON object template that might contain some id or reference
+        for your internal use and is filled with the event in JSON format. Note that you cannot use
+        a semicolon in the JSON template.
+        Example:
+        mqtt:tcp://mqttcc1.cryptowerk.com:1883;test/topic2;{myCustomId:'someid1'}
+
+    - in: query
+      name: apiKey
+      required: false
+      schema:
+        type: string
+      #allowReserved: false
+      description: >-
+        Key that identifies the account. It can be provided (1) here as a query parameter or (2) as a header named X-API-Key with apiKey and apiCredential separated by a blank space or (3) by logging in using AWS Cognito.
+    - in: query
+      name: apiCredential
+      required: false
+      schema:
+        type: string
+      #allowReserved: false
+      description: >-
+        A credential matching a user of an account. It can be provided (1) here as a query parameter or (2) as a header named X-API-Key with apiKey and apiCredential separated by a blank space or (3) by logging in using AWS Cognito.
+        The API credential is only valid together with the API key. It
+        verifies the authenticity of the account access.
+    #get:
+    #  mac-ro(registerCall)
+    #  #httpMethod: "GET"
+    post:
+      tags:
+      - "Sealing"
+      security:
+        - APIKeyHeader: []
+      x-amazon-apigateway-integration:
+        uri: "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:283356447406:function:SealCentralStationsandbox/invocations"
+        responses:
+          default:
+            statusCode: "200"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        #contentHandling: "CONVERT_TO_TEXT"
+        type: "aws_proxy"
+      summary: Register hashes
+      operationId: register
+      description: |
+        The register command posts a hash of a document or any data for
+        registration on a blockchain. The blockchain entry can later be used as
+        a mathematical proof for the existence of this data at the moment it was
+        posted.
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Registration'
+        400:
+          description: |
+            Bad request (for example - header field missing, wrong filter, validation failed)
+        403:
+          description: Forbidden (insufficient authorization)
+        500:
+          description: Internal server error
+      #httpMethod: "POST"
+  /verify:
+    parameters:
+    - $ref: '#/components/parameters/apiVersion'
+    - in: query
+      name: retrievalId
+      description: |
+        This is the retrievalId that was returned in a previous 'register' call.
+      schema:
+        type: string
+        example: "ri2125374bdcbc82d69be2d9ea928e1c01cb5baf53d6bd8c163f56579bb6f8452ead11440"
+      required: false
+    - in: query
+      name: retrievalIds
+      description: |
+        Here you can specify more than one 'retrievalId' in order to check more than one previously submitted registration status.
+      schema:
+        type: array
+        items:
+          type: string
+      required: false
+    #- in: query
+    #  name: retrievalDocHash
+    #  description: >
+    #    Instead of providing a unique 'retrievalId' that specifies exactly one registration, you can lookup matching hashes. Note, though, that this might return many registrations, and not necessarily all yours.
+    #    An example value would be:
+    #    1111111111111111111111111111111111111111111111111111111111111111
+    #  schema:
+    #    type: string
+    #    # would be sent by default: example: "1111111111111111111111111111111111111111111111111111111111111111"
+    #  required: false
+    - in: query
+      name: provideVerificationInfos
+      description: This provides additional verification information.
+      schema:
+        type: boolean
+        default: false
+      required: false
+    #- provideRegistrarInfo
+    #- sealFormat
+    - in: query
+      name: verifyDocHashes
+      description: |
+        This is the start of the second group of operations, u.e. to verify a previously issued seal.
+
+        Note that instead you also can verify that yourself. We provide software in source code for that purpose.
+        This ensures that you don't have to rely on us to be able to prove the existence of a registration to anyone.
+        However, you might want to use this verification service for convenience.
+        This parameter contains a comma-separated list of hex-encoded hashes of the document(s) you want to check against a previous registration.
+        An example value would be:
+        1111111111111111111111111111111111111111111111111111111111111111,
+        2222222222222222222222222222222222222222222222222222222222222222
+      schema:
+        type: string
+        # would be sent by default: example: "1111111111111111111111111111111111111111111111111111111111111111,2222222222222222222222222222222222222222222222222222222222222222"
+      required: false
+    - in: query
+      name: seals
+      description: This is a comma-separated list of seals to check against the hashes.
+      schema:
+        type: string
+      required: false
+    - in: query
+      name: provideInstructions
+      description: This provides additional instructions to verify the hash(es).
+      schema:
+        type: boolean
+        default: false
+      required: false
+    #- name: body
+    #  in: body
+    #  required: true
+    #  schema:
+    #    type: object
+    #    properties:
+    #      retrievalId:
+    #        type: string
+    #        description: >-
+    #          The retrieval ID of the document to verify. This value must
+    #          have been returned by a previous registration of a hash.  See
+    #          retrievalId in the response of /register
+    #      retrievalIds:
+    #        type: string
+    #        description: >-
+    #          Alternative to the parameter retrievalId a comma separated
+    #          list of retrieval IDs can be provided
+    - in: query
+      name: apiKey
+      required: false
+      schema:
+        type: string
+      #allowReserved: false
+      description: >-
+        Key that identifies the account. It can be provided (1) here as a query parameter or (2) as a header named X-API-Key with apiKey and apiCredential separated by a blank space or (3) by logging in using AWS Cognito.
+    - in: query
+      name: apiCredential
+      required: false
+      schema:
+        type: string
+      #allowReserved: false
+      description: >-
+        A credential matching a user of an account. It can be provided (1) here as a query parameter or (2) as a header named X-API-Key with apiKey and apiCredential separated by a blank space or (3) by logging in using AWS Cognito.
+        The API credential is only valid together with the API key. It
+        verifies the authenticity of the account access.
+    #get:
+    #  mac-ro(verifyCall)
+    #  #httpMethod: "GET"
+    post:
+      tags:
+      - "Sealing"
+      security:
+        - APIKeyHeader: []
+      x-amazon-apigateway-integration:
+        uri: "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:283356447406:function:SealCentralStationsandbox/invocations"
+        responses:
+          default:
+            statusCode: "200"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        #contentHandling: "CONVERT_TO_TEXT"
+        type: "aws_proxy"
+      summary: Verify hashes, check registration
+      operationId: verify
+      description: |
+        Either (1) check registration status of previously registered hashes or (2) verify a previously issued seal.
+      responses:
+        200:
+          description: Successful response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  minSupportedAPIVersion:
+                    type: integer
+                    description: |
+                      API version must be greater or equal to this value on this server
+                  maxSupportedAPIVersion:
+                    type: integer
+                    description: |
+                      API version must be less or equal to this value on this server
+                  documents:
+                    description: Array of documents that were found by the given parameters
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        retrievalId:
+                          description: Unique identifier for the document.
+                          type: string
+                        seals:
+                          type: array
+                          description: |
+                            A Seal contains the information required to prove that a document had been registered in a blockchain.
+                            I.e., among other things, it contains a (transaction) identifier in one or multiple blockchains, the hash of a document,
+                            the conclusive mathematical proof linking the document to the blockchain demonstrating the document's existence at
+                            registration time and it not having been tampered with, the time this document was
+                            submitted to the server and the time it was submitted to
+                            the blockchain.
+                          items:
+                            $ref: '#/components/schemas/Seal'
+                            #type: object
+                            #properties:
+                            #  data:
+                            #    type: string
+                            #    description: >-
+                            #      unique identifier for one document in one
+                            #      blockchain
+                        #verificationInstructions:
+                        #  type: object
+                        #  properties:
+                        #    bundles:
+                        #      type: array
+                        #      items:
+                        #        type: object
+                        #        properties:
+                        #          sequence:
+                        #            description: >-
+                        #              Each of the objects in this array called
+                        #              sequence contains either the hash to append,
+                        #              the hash to prepend, or the anchor hash. If the
+                        #              concatenated hashes in each step are hashed
+                        #              again in the right order, the final result will
+                        #              be the anchor hash that can be found in the
+                        #              blockchain(s) where this document bundle is
+                        #              registered.
+                        #            type: array
+                        #            items:
+                        #              type: object
+                        #              properties:
+                        #                append:
+                        #                  type: string
+                        #                  description: hash to append to previous result to
+                        #                prepend:
+                        #                  type: string
+                        #                  description: >-
+                        #                    hash to be appended to the previous
+                        #                    result
+                        #                anchor:
+                        #                  type: string
+                        #                  description: >-
+                        #                    hash to be found directly in the
+                        #                    blockchain (anchor of the bundle)
+                        #          blockchainRegistrations:
+                        #            type: array
+                        #            items:
+                        #              type: object
+                        #              properties:
+                        #                blockChainId:
+                        #                  type: string
+                        #                  description: id for the used blockchain.
+                        #                insertedIntoBlockchainAt:
+                        #                  type: integer
+                        #                  format: int64
+                        #                  description: >-
+                        #                    timestamp for the blockchain
+                        #                    registration of the bundle
+                        #                blockChainDesc:
+                        #                  type: object
+                        #                  properties:
+                        #                    instanceName:
+                        #                      type: string
+                        #                      description: Name of the blockchain instance
+                        #                    generalName:
+                        #                      type: string
+                        #                      description: General name of the blockchain instance
+                        name:
+                          type: string
+                          description: |
+                            This is the same name that was used for the registration of this document.
+                        submittedAt:
+                          type: integer
+                          format: int64
+                          description: |
+                            Time stamp when this document/hash was received by the server (milliseconds since 1/1/1970 12:00am UST)
+                        contentType:
+                          type: string
+                          description: |
+                            This is the same content type as on registration of the document.
+                        hasBeenInsertedIntoAtLeastOneBlockchain:
+                          type: boolean
+                          description: |
+                            This property is true, if the document has been registered with at least one blockchain, otherwise it is false.
+                        hasBeenInsertedIntoAllRequestedBlockchains:
+                          type: boolean
+                          description: |
+                            This property is true, if the document has been registered with all requested blockchains, otherwise it is false.
+                        blockchainRegistrations:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              blockChainId:
+                                type: string
+                                description: id for the used blockchain.
+                              insertedIntoBlockchainAt:
+                                type: integer
+                                format: int64
+                                description: |
+                                  Time stamp for the blockchain registration of the document bundle that contains this document in the
+                                  blockchain (milliseconds since 1/1/1970 12:00am UST).
+                              numConfirmations:
+                                type: integer
+                                description: |
+                                  Number of verifications that witness the document bundle in the blockchain.
+                              blockChainDesc:
+                                type: object
+                                properties:
+                                  instanceName:
+                                    type: string
+                                    description: Name of the blockchain instance
+                                  generalName:
+                                    type: string
+                                    description: General name of the blockchain instance
+                # valid, but api2html doesn't process it: $ref: '#/components/schemas/Verification'
+        400:
+          description: |
+            Bad request (for example - header field missing, wrong filter,validation failed)
+        403:
+          description: Forbidden (insufficient authorization)
+        500:
+          description: Internal server error
+      #httpMethod: "POST"
+  /cancelAllCallbacks:
+    parameters:
+    - $ref: '#/components/parameters/apiVersion'
+    - in: query
+      name: apiKey
+      required: false
+      schema:
+        type: string
+      #allowReserved: false
+      description: >-
+        Key that identifies the account. It can be provided (1) here as a query parameter or (2) as a header named X-API-Key with apiKey and apiCredential separated by a blank space or (3) by logging in using AWS Cognito.
+    - in: query
+      name: apiCredential
+      required: false
+      schema:
+        type: string
+      #allowReserved: false
+      description: >-
+        A credential matching a user of an account. It can be provided (1) here as a query parameter or (2) as a header named X-API-Key with apiKey and apiCredential separated by a blank space or (3) by logging in using AWS Cognito.
+        The API credential is only valid together with the API key. It
+        verifies the authenticity of the account access.
+    post:
+      tags:
+      - "Sealing"
+      security:
+        - APIKeyHeader: []
+      x-amazon-apigateway-integration:
+        uri: "arn:aws:apigateway:us-east-1:lambda:path/2015-03-31/functions/arn:aws:lambda:us-east-1:283356447406:function:SealCentralStationsandbox/invocations"
+        responses:
+          default:
+            statusCode: "200"
+        passthroughBehavior: "when_no_match"
+        httpMethod: "POST"
+        #contentHandling: "CONVERT_TO_TEXT"
+        type: "aws_proxy"
+      description: >-
+        Cancel all pending callbacks belonging to your account.
+        This is mainly useful for debugging in case your provided callback endpoint is under development.
+        Then it may be that it is either not reachable or that it returns error codes. Instead of continuing to retry to invoke the callback you can clear the pending callbacks.
+      responses:
+        200:
+          description: Successful response
+        400:
+          description: Bad request (for example - header field missing, wrong filter, validation failed)
+        403:
+          description: Forbidden (insufficient authorization)
+        500:
+          description: Internal server error
+      #httpMethod: "POST"
+
+#      x-amazon-apigateway-integration:
+#        uri: "https://sealendpoint1.cryptowerk.net/platform/API"
+#        responses:
+#          default:
+#            statusCode: "200"
+#        passthroughBehavior: "when_no_match"
+#        #httpMethod: "GET"
+#        type: "http"
+#        #requestParameters:
+#        #  integration.request.querystring.version: method.request.querystring.version
+

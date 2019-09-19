@@ -1,0 +1,7 @@
+specFileName: SealAPIin.yml
+apiTitle: seal
+splitSpec: false
+codeSamples: true
+swaggerUI: true
+travis: false
+oasVersion: 3.0.1
